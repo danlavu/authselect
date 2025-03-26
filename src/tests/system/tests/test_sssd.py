@@ -295,3 +295,31 @@ def test_sssd__enabling_and_then_disabling_with_gssapi_feature(client: Client, p
             result = ssh.run(i, raise_on_error=False)
             assert result.rc != 0
             assert "sudo: a password is required" in result.stderr
+
+
+@pytest.mark.importance("high")
+@pytest.mark.ticket(jira="SSSD-7706")
+@pytest.mark.topology(KnownTopology.IPA)
+def test_sssd__nsswitch_conf_group_merging(client: Client, provider: GenericProvider):
+    """
+    :title: NSSwitch merges two databases on group lookup
+    :description: there is no configuration required, merging is the default behavior in authselect 1.5.x
+    :setup:
+        1. Create provider user ‘user1’
+        2. Create provider group where the name and gid matches files on the client, ‘audio:*:63’
+        3. Add ‘user1’ to provider group ‘audio’
+    :steps:
+        1. Lookup group
+        2. Lookup group using only the files service
+    :expectedresults:
+        1. Group is found and ‘user1’ is a member
+        2. Group is found and ‘user1’ is not a member
+    :customerscenario: False
+    """
+    group = "audio"
+    gid = client.tools.getent.group(group).gid
+
+    provider.group(group).add(gid=gid).add_member(provider.user("user1").add())
+
+    assert "user1" in client.tools.getent.group(group).members, "'user1' is not a member of the group!"
+    assert "user1" not in client.tools.getent.group(group, service = "files"), "'user1' should not be a member of the group!"
